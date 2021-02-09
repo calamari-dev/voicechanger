@@ -1,0 +1,1 @@
+export { LPCAnalyzer } from "./LPCAnalyzer";
