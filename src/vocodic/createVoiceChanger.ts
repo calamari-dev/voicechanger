@@ -1,35 +1,36 @@
 import { TD_PSOLA } from "./TD_PSOLA";
-import { NumericList } from "./types";
 import { EnvelopeTransformer } from "./EnvelopeTransformer";
-import { createSynthWindow, hannWindow } from "./math/window";
+import { createSynthWindow, hannWindow } from "../math/window";
 import { PeriodDetector } from "./PeriodDetector";
 
 interface Config {
   sampleRate: number;
   pitchshift: number;
   envelopeTransform: (y: number) => number;
-  EQ: (x: number) => number;
 }
 
-const defaultT0 = 130;
 const quantile = 3;
 const synthWindow = createSynthWindow(hannWindow, quantile);
 
 export const createVoiceChanger = function* (config: Config) {
+  const { pitchshift } = config;
   const stft = new EnvelopeTransformer(config);
   const td_psola = new TD_PSOLA({
     ...config,
     quantile,
   });
 
-  const periodDetector = new PeriodDetector({ fftSize: 1024 });
+  const periodDetector = new PeriodDetector({
+    sampleRate: 44100,
+    dftSize: 1024,
+  });
 
   let input: number[] = [];
   const output: number[] = [];
 
   let segment: ArrayLike<number> = Array(1024).fill(0);
   let windowstart = 0;
-  let t0 = 0;
+  let T0 = 0;
 
   // 分析に要する遅延
   while (input.length < 1024) {
@@ -42,7 +43,7 @@ export const createVoiceChanger = function* (config: Config) {
     // バッファ管理
     {
       const segsize = segment.length;
-      const frameshift = Math.round(segsize / quantile);
+      const frameshift = Math.round(segsize / (pitchshift * quantile));
       const overlap = segsize - frameshift;
 
       if (output.length <= overlap) {
@@ -61,39 +62,33 @@ export const createVoiceChanger = function* (config: Config) {
     }
 
     if (delta === 1024) {
-      t0 = periodDetector.getPeriod(input, windowstart);
-      if (t0 === 0) t0 = defaultT0;
+      T0 = periodDetector.getPeriod(input, windowstart);
     }
 
-    if (delta < 1024 || delta < quantile * t0) {
+    if (delta < 1024 || delta < quantile * T0) {
       continue;
     }
 
     // フォルマントシフト
-    let formantshifted: NumericList;
-    const width = quantile * t0;
+    const width = quantile * T0;
+    let pitchmark = 0;
 
-    let peak = 0;
-
-    for (let i = 0, max = 0; i < t0 && i >= 0; i++) {
-      const amp = Math.abs(input[windowstart - i]);
+    for (let t = 0, max = 0; t < T0 && t >= 0; t++) {
+      const amp = Math.abs(input[windowstart - t]);
       if (amp > max) {
         max = amp;
-        peak = windowstart - i;
+        pitchmark = windowstart - t;
       }
     }
 
-    formantshifted = stft.getGlottalSegment(input, peak, width);
+    const formantshifted = stft.transform(input, pitchmark, width);
 
-    // STFTの合成窓を掛ける
     for (let t = 0; t < width; t++) {
       formantshifted[t] *= synthWindow(t / width);
     }
 
-    // TD-PSOLA
     const pitchshifted = td_psola.run(formantshifted);
 
-    // 更新処理
     const frameshift = Math.round(width / quantile);
     segment = pitchshifted;
     input = input.slice(windowstart);

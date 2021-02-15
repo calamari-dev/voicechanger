@@ -15,5 +15,8 @@
     "sourceType": "module"
   },
   "plugins": ["@typescript-eslint"],
-  "rules": {}
+  "rules": {
+    "prefer-const": "off",
+    "@typescript-eslint/explicit-module-boundary-types": "off"
+  }
 }

@@ -1,4 +1,4 @@
-import { hammingWindow } from "./math/window";
+import { hannWindow } from "../math/window";
 
 interface Config {
   pitchshift: number;
@@ -18,17 +18,17 @@ export class TD_PSOLA {
     const insize = input.length;
     const r = 1 / this.pitchshift;
     const q = this.quantile;
-    const t0 = Math.floor(insize / q);
+    const T0 = Math.floor(insize / q);
 
     const outsize = Math.ceil((insize / q) * ((q - 2) * r + 2));
     const output = new Float64Array(outsize);
 
     for (let i = 0; i < q - 1; i++) {
-      const is = i * t0;
-      const os = i * Math.floor(r * t0);
+      const is = i * T0;
+      const os = i * Math.floor(r * T0);
 
-      for (let k = 0; k < 2 * t0; k++) {
-        output[os + k] += input[is + k] * hammingWindow(k / (2 * t0));
+      for (let k = 0; k < 2 * T0; k++) {
+        output[os + k] += input[is + k] * hannWindow(k / (2 * T0));
       }
     }
 

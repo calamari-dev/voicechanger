@@ -1,19 +1,19 @@
 import DFT from "fft";
-import { hammingWindow, hannWindow } from "./math/window";
-import { toSpectrum } from "./cepstrum/toSpectrum";
-import { toCepstrum } from "./cepstrum/toCepstrum";
-import { ComplexList } from "./types";
-import { linearAt } from "./linearAt";
+import { hammingWindow, hannWindow } from "../math/window";
+import { toSpectrum } from "../cepstrum/toSpectrum";
+import { toCepstrum } from "../cepstrum/toCepstrum";
+import { ComplexList } from "../types";
+import { linearAt } from "../linearAt";
 import { resample } from "./resample";
-import { LPCAnalyzer } from "./lpc/LPCAnalyzer";
+import { LPCAnalyzer } from "../lpc/LPCAnalyzer";
 
 interface Config {
   sampleRate: number;
   pitchshift: number;
   envelopeTransform: (y: number) => number;
-  EQ: (x: number) => number;
 }
 
+const threshould = 80;
 const lpcAnalyzer = new LPCAnalyzer({
   degree: 40,
   window: hannWindow,
@@ -23,16 +23,15 @@ export class EnvelopeTransformer {
   private sampleRate: number;
   private pitchshift: number;
   private resampler: (f: number) => number;
-  private EQ: (f: number) => number;
 
-  constructor({ sampleRate, pitchshift, envelopeTransform, EQ }: Config) {
+  constructor({ sampleRate, pitchshift, envelopeTransform }: Config) {
     this.sampleRate = sampleRate;
     this.pitchshift = pitchshift;
     this.resampler = envelopeTransform;
-    this.EQ = EQ;
   }
 
-  getGlottalSegment(input: ArrayLike<number>, from: number, width: number) {
+  transform(input: ArrayLike<number>, from: number, width: number) {
+    /*\
     const dft = new DFT(width);
     const segment = dft.createVec("Float64Array");
     const envelope = lpcAnalyzer.getSpectralEnvelope(input, from, width);
@@ -86,6 +85,7 @@ export class EnvelopeTransformer {
 
     const formantshifted = dft.realIDFT(spectrum[0], spectrum[1]);
     return formantshifted;
+    \*/
 
     /*\
     const dft = new DFT(width);
@@ -97,13 +97,10 @@ export class EnvelopeTransformer {
 
     const Envelope = dft.realDFT(segment);
     const NextSpectrum = this.resample(Envelope, dft);
-    this.applyEQ(NextSpectrum, dft);
-
     const formantshifted = dft.realIDFT(NextSpectrum[0], NextSpectrum[1]);
     return formantshifted;
     \*/
 
-    /*\
     const dft = new DFT(width);
     const segment = dft.createVec("Float64Array");
 
@@ -135,25 +132,6 @@ export class EnvelopeTransformer {
     }
 
     const NextSpectrum = toSpectrum(highCepstrum, dft);
-    this.applyEQ(NextSpectrum, dft);
-
-    const formantshifted = dft.realIDFT(NextSpectrum[0], NextSpectrum[1]);
-    return formantshifted;
-    \*/
-  }
-
-  getNonGlottalSegment(input: ArrayLike<number>, from: number, width: number) {
-    const dft = new DFT(width);
-    const segment = dft.createVec("Float64Array");
-
-    for (let i = 0; i < width; i++) {
-      segment[i] = input[i + from] * hammingWindow(i / width);
-    }
-
-    const Envelope = dft.realDFT(segment);
-    const NextSpectrum = this.resample(Envelope, dft);
-    // this.applyEQ(NextSpectrum, dft);
-
     const formantshifted = dft.realIDFT(NextSpectrum[0], NextSpectrum[1]);
     return formantshifted;
   }
@@ -171,17 +149,5 @@ export class EnvelopeTransformer {
     });
 
     return [Yr, Yi];
-  }
-
-  private applyEQ(X: ComplexList, dft: DFT): void {
-    const Fmax = X[0].length;
-    const pitchshift = this.pitchshift;
-    const normalizer = this.sampleRate / dft.size;
-
-    for (let Fx = 0; Fx < Fmax; Fx++) {
-      const r = this.EQ(Fx * normalizer * pitchshift);
-      X[0][Fx] *= r;
-      X[1][Fx] *= r;
-    }
   }
 }
